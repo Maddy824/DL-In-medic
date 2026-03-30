@@ -12,21 +12,21 @@
 
 ---
 
-## 🌟 Key Features
+##  Key Features
 
-### 🎯 **Real-Time Classification**
+###  **Real-Time Classification**
 - **MobileNetV2-based CNN** with channel attention mechanism
 - **7 skin lesion categories**: Melanoma, Basal Cell Carcinoma, Actinic Keratosis, Vascular Lesion, Benign Keratosis, Melanocytic Nevi, Dermatofibroma
 - **Risk-level assessment**: Critical, High, Moderate, Low
 - **Sub-second inference** on CPU (~100-300ms)
 
-### 📸 **Camera Integration**
+###  **Camera Integration**
 - WebRTC-powered real-time camera access
 - Front/rear camera switching
 - Live capture with viewfinder overlay
 - File upload support for existing images
 
-### 🎨 **3D Augmentation Pipeline**
+###  **3D Augmentation Pipeline**
 Advanced data augmentation simulating real-world variations:
 - **Surface Normal Estimation** — Gradient-based pseudo-3D reconstruction
 - **Perspective Warping** — 3D rotation (pitch/yaw/roll) via homography transforms
@@ -34,13 +34,13 @@ Advanced data augmentation simulating real-world variations:
 - **Elastic Deformation** — Skin stretch/compression modeling
 - **Color Augmentation** — HSV-space white balance & skin tone variation
 
-### 🔮 **3D Visualization**
+###  **3D Visualization**
 - Interactive Three.js 3D skin surface viewer
 - Lesion texture mapping onto curved geometry
 - Real-time rotation and zoom controls
 - Step-by-step augmentation visualization
 
-### 🎨 **Modern Medical UI**
+###  **Modern Medical UI**
 - Dark mode medical-grade interface
 - Animated risk cards with color-coded severity
 - Probability distribution charts
@@ -48,28 +48,28 @@ Advanced data augmentation simulating real-world variations:
 
 ---
 
-## 🏗️ Architecture
+##  Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                     Frontend (React + Vite)                  │
+┌────────────────────────────────────────────────────────────┐
+│                     Frontend (React + Vite)                │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
 │  │   Camera     │  │  3D Viewer   │  │ Augmentation │      │
 │  │  Component   │  │  (Three.js)  │  │   Viewer     │      │
 │  └──────────────┘  └──────────────┘  └──────────────┘      │
-└─────────────────────────────────────────────────────────────┘
+└────────────────────────────────────────────────────────────┘
                             ↕ REST API
 ┌─────────────────────────────────────────────────────────────┐
-│                   Backend (FastAPI + PyTorch)                │
+│                   Backend (FastAPI + PyTorch)               │
 │  ┌──────────────────────────────────────────────────────┐   │
-│  │              DermClassifier Model                     │   │
+│  │              DermClassifier Model                    │   │
 │  │  • MobileNetV2 Backbone (ImageNet Pretrained)        │   │
 │  │  • Channel Attention (SE-style)                      │   │
-│  │  • Classification Head: FC(1280→512→256→7)          │   │
-│  │  • Auxiliary Confidence Head: FC(1280→128→1)        │   │
+│  │  • Classification Head: FC(1280→512→256→7)           │   │
+│  │  • Auxiliary Confidence Head: FC(1280→128→1)         │   │
 │  └──────────────────────────────────────────────────────┘   │
 │  ┌──────────────────────────────────────────────────────┐   │
-│  │           3D Augmentation Pipeline                    │   │
+│  │           3D Augmentation Pipeline                   │   │
 │  │  1. Surface Normal Estimation (Sobel gradients)      │   │
 │  │  2. Perspective Warp (3D rotation matrix)            │   │
 │  │  3. Lambertian Lighting (dot product shading)        │   │
@@ -81,7 +81,7 @@ Advanced data augmentation simulating real-world variations:
 
 ---
 
-## 🚀 Quick Start
+##  Quick Start
 
 ### Prerequisites
 - **Python 3.9+**
@@ -132,7 +132,7 @@ The frontend will automatically proxy API requests to the backend at `http://loc
 
 ---
 
-## 📊 Model Performance
+##  Model Performance
 
 ### Architecture Details
 | Component | Specification |
@@ -157,7 +157,7 @@ The frontend will automatically proxy API requests to the backend at `http://loc
 
 ---
 
-## 🔬 Technical Deep Dive
+##  Technical Deep Dive
 
 ### 3D Augmentation Pipeline
 
@@ -269,17 +269,17 @@ DL-In-medic/
 
 ---
 
-## 🎯 Use Cases
+##  Use Cases
 
-- **🏥 Telemedicine**: Remote skin screening for underserved areas
-- **🔬 Research**: Dermatological dataset augmentation
-- **📚 Education**: Medical student training tool
-- **🚨 Early Detection**: Preliminary melanoma screening
-- **📊 Clinical Trials**: Automated lesion documentation
+- ** Telemedicine**: Remote skin screening for underserved areas
+- ** Research**: Dermatological dataset augmentation
+- ** Education**: Medical student training tool
+- ** Early Detection**: Preliminary melanoma screening
+- ** Clinical Trials**: Automated lesion documentation
 
 ---
 
-## ⚠️ Medical Disclaimer
+##  Medical Disclaimer
 
 **IMPORTANT**: This tool is for **educational and screening purposes only**. It is **NOT a substitute for professional medical diagnosis**.
 
@@ -291,7 +291,7 @@ DL-In-medic/
 
 ---
 
-## 🛠️ Development
+##  Development
 
 ### Training Your Own Model
 
@@ -331,7 +331,7 @@ uvicorn main:app --host 0.0.0.0 --port 8000
 
 ---
 
-## 🤝 Contributing
+##  Contributing
 
 Contributions are welcome! Please follow these guidelines:
 
@@ -343,13 +343,13 @@ Contributions are welcome! Please follow these guidelines:
 
 ---
 
-## 📜 License
+##  License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ---
 
-## 🙏 Acknowledgments
+##  Acknowledgments
 
 - **HAM10000 Dataset**: Tschandl, P., Rosendahl, C. & Kittler, H. The HAM10000 dataset, a large collection of multi-source dermatoscopic images of common pigmented skin lesions. Sci. Data 5, 180161 (2018).
 - **MobileNetV2**: Sandler, M., et al. "MobileNetV2: Inverted Residuals and Linear Bottlenecks." CVPR 2018.
@@ -357,7 +357,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ---
 
-## 📧 Contact
+##  Contact
 
 **Maddy** — [@Maddy824](https://github.com/Maddy824)
 
@@ -365,14 +365,14 @@ Project Link: [https://github.com/Maddy824/DL-In-medic](https://github.com/Maddy
 
 ---
 
-## 🌐 Demo
+##  Demo
 
-🚀 **Live Demo**: Coming soon!
+ **Live Demo**: Coming soon!
 
 ---
 
 <div align="center">
-  <strong>Built with ❤️ for advancing dermatological AI</strong>
+  <strong>Built with love for advancing dermatological AI</strong>
   <br>
   <sub>Remember: Always consult a healthcare professional for medical advice</sub>
 </div>
