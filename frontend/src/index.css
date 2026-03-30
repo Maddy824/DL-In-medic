@@ -1,0 +1,77 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply antialiased;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  }
+}
+
+@layer components {
+  .glass-card {
+    @apply bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl;
+  }
+  .glass-card-solid {
+    @apply bg-gray-900/80 backdrop-blur-xl border border-white/10 rounded-2xl;
+  }
+  .risk-critical {
+    @apply bg-red-500/20 border-red-500/50 text-red-300;
+  }
+  .risk-high {
+    @apply bg-orange-500/20 border-orange-500/50 text-orange-300;
+  }
+  .risk-moderate {
+    @apply bg-yellow-500/20 border-yellow-500/50 text-yellow-300;
+  }
+  .risk-low {
+    @apply bg-green-500/20 border-green-500/50 text-green-300;
+  }
+}
+
+/* Camera viewfinder overlay */
+.viewfinder-corner {
+  position: absolute;
+  width: 24px;
+  height: 24px;
+  border-color: #38bdf8;
+  border-width: 3px;
+}
+.viewfinder-corner.tl { top: 12px; left: 12px; border-right: none; border-bottom: none; border-radius: 4px 0 0 0; }
+.viewfinder-corner.tr { top: 12px; right: 12px; border-left: none; border-bottom: none; border-radius: 0 4px 0 0; }
+.viewfinder-corner.bl { bottom: 12px; left: 12px; border-right: none; border-top: none; border-radius: 0 0 0 4px; }
+.viewfinder-corner.br { bottom: 12px; right: 12px; border-left: none; border-top: none; border-radius: 0 0 4px 0; }
+
+/* Scanning line animation */
+.scan-line {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, #38bdf8, transparent);
+  animation: scanline 2.5s ease-in-out infinite;
+}
+
+@keyframes scanline {
+  0% { top: 12px; opacity: 0; }
+  10% { opacity: 1; }
+  90% { opacity: 1; }
+  100% { top: calc(100% - 14px); opacity: 0; }
+}
+
+/* Probability bar animation */
+.prob-bar {
+  transition: width 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* 3D viewer canvas */
+canvas {
+  touch-action: none;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.25); }
