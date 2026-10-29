@@ -4,7 +4,7 @@ python-multipart==0.0.6
 torch==2.1.1
 torchvision==0.16.1
 Pillow==10.1.0
-numpy==1.26.2
+numpy==2.5.4
 scipy==1.11.4
 opencv-python-headless==4.8.1.78
 scikit-image==0.22.0
