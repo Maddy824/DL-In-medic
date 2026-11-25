@@ -1,59 +1,63 @@
-import React, { useRef, useState, useCallback, useEffect } from 'react';
+import { useRef, useState, useCallback, useEffect } from 'react';
 import { Camera as CameraIcon, SwitchCamera, Aperture, Upload, X } from 'lucide-react';
 
-export default function Camera({ onCapture, isAnalyzing }) {
+export default function Camera({ onCapture, onClear, preview, isAnalyzing }) {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const fileInputRef = useRef(null);
+  const streamRef = useRef(null);
+  const requestRef = useRef(0);
   const [stream, setStream] = useState(null);
   const [facingMode, setFacingMode] = useState('environment');
-  const [cameraActive, setCameraActive] = useState(false);
-  const [preview, setPreview] = useState(null);
+  const cameraActive = stream !== null;
 
-  const startCamera = useCallback(async () => {
+  const releaseCamera = useCallback(() => {
+    requestRef.current++;
+    streamRef.current?.getTracks().forEach(track => track.stop());
+    streamRef.current = null;
+  }, []);
+
+  const stopCamera = useCallback(() => {
+    releaseCamera();
+    setStream(null);
+  }, [releaseCamera]);
+
+  const startCamera = useCallback(async (mode) => {
+    stopCamera();
+    const request = ++requestRef.current;
+    setFacingMode(mode);
     try {
-      if (stream) {
-        stream.getTracks().forEach(t => t.stop());
-      }
       const mediaStream = await navigator.mediaDevices.getUserMedia({
         video: {
-          facingMode,
+          facingMode: mode,
           width: { ideal: 1280 },
           height: { ideal: 720 },
         },
         audio: false,
       });
-      if (videoRef.current) {
-        videoRef.current.srcObject = mediaStream;
+      if (request !== requestRef.current) {
+        mediaStream.getTracks().forEach(track => track.stop());
+        return;
       }
+      streamRef.current = mediaStream;
       setStream(mediaStream);
-      setCameraActive(true);
     } catch (err) {
+      if (request !== requestRef.current) return;
       console.error('Camera access denied:', err);
-      alert('Camera access is required for real-time screening. Please allow camera permissions.');
+      alert('Camera access was denied. Allow camera permissions or upload an image.');
     }
-  }, [facingMode, stream]);
-
-  const stopCamera = useCallback(() => {
-    if (stream) {
-      stream.getTracks().forEach(t => t.stop());
-      setStream(null);
-    }
-    setCameraActive(false);
-  }, [stream]);
+  }, [stopCamera]);
 
   const switchCamera = useCallback(() => {
-    setFacingMode(prev => (prev === 'environment' ? 'user' : 'environment'));
-  }, []);
+    startCamera(facingMode === 'environment' ? 'user' : 'environment');
+  }, [facingMode, startCamera]);
 
+  // The video element mounts after cameraActive changes, and remounts after preview.
   useEffect(() => {
-    if (cameraActive) {
-      startCamera();
-    }
-    return () => {
-      if (stream) stream.getTracks().forEach(t => t.stop());
-    };
-  }, [facingMode]);
+    if (videoRef.current && stream) videoRef.current.srcObject = stream;
+  }, [stream, cameraActive, preview]);
+
+  useEffect(() => releaseCamera, [releaseCamera]);
 
   const captureFrame = useCallback(() => {
     if (!videoRef.current || !canvasRef.current) return;
@@ -63,28 +67,22 @@ export default function Camera({ onCapture, isAnalyzing }) {
     canvas.height = video.videoHeight;
     const ctx = canvas.getContext('2d');
     ctx.drawImage(video, 0, 0);
+    const request = ++requestRef.current;
     canvas.toBlob(blob => {
-      if (blob) {
-        const url = URL.createObjectURL(blob);
-        setPreview(url);
+      if (blob && request === requestRef.current) {
+        stopCamera();
         onCapture(blob);
       }
     }, 'image/jpeg', 0.92);
-  }, [onCapture]);
+  }, [onCapture, stopCamera]);
 
   const handleFileUpload = useCallback((e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const url = URL.createObjectURL(file);
-    setPreview(url);
+    stopCamera();
     onCapture(file);
     e.target.value = '';
-  }, [onCapture]);
-
-  const clearPreview = useCallback(() => {
-    if (preview) URL.revokeObjectURL(preview);
-    setPreview(null);
-  }, [preview]);
+  }, [onCapture, stopCamera]);
 
   return (
     <div className="flex flex-col items-center gap-4">
@@ -93,14 +91,13 @@ export default function Camera({ onCapture, isAnalyzing }) {
         {preview ? (
           <>
             <img src={preview} alt="Captured" className="w-full h-full object-cover" />
-            {!isAnalyzing && (
-              <button
-                onClick={clearPreview}
-                className="absolute top-3 right-3 p-2 bg-black/60 rounded-full hover:bg-black/80 transition-colors"
-              >
-                <X size={18} />
-              </button>
-            )}
+            <button
+              onClick={onClear}
+              aria-label="Clear image"
+              className="absolute z-10 top-3 right-3 p-2 bg-black/60 rounded-full hover:bg-black/80 transition-colors"
+            >
+              <X size={18} />
+            </button>
             {isAnalyzing && (
               <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
                 <div className="flex flex-col items-center gap-3">
@@ -158,11 +155,11 @@ export default function Camera({ onCapture, isAnalyzing }) {
             </div>
             <div className="text-center">
               <p className="text-white/80 font-medium mb-1">Capture or Upload</p>
-              <p className="text-white/40 text-sm">Use your camera or upload an image of a skin lesion for AI screening</p>
+              <p className="text-white/40 text-sm">Use your camera or upload an image to explore the visualizations</p>
             </div>
             <div className="flex gap-3">
               <button
-                onClick={startCamera}
+                onClick={() => startCamera(facingMode)}
                 className="px-5 py-2.5 bg-medical-600 hover:bg-medical-500 rounded-xl font-medium transition-colors flex items-center gap-2"
               >
                 <CameraIcon size={18} />

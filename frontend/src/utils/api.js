@@ -27,7 +27,8 @@ export async function augmentImage(file) {
   });
 
   if (!res.ok) {
-    throw new Error('Augmentation failed');
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || 'Augmentation failed');
   }
 
   return res.json();

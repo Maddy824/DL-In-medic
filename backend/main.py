@@ -1,60 +1,106 @@
-"""
-FastAPI Backend for Real-Time Dermatological Screening
-Endpoints:
-  POST /api/analyze       - Analyze a skin lesion image
-  POST /api/augment       - Apply 3D augmentation and return steps
-  GET  /api/health        - Health check
-  GET  /api/model-info    - Model metadata
-"""
+"""Local API for the DermScreen computer-vision demo."""
 
-import io
 import base64
+import io
+import os
 import time
 import uuid
 from contextlib import asynccontextmanager
+from typing import Annotated
 
-import numpy as np
-from PIL import Image
-from fastapi import FastAPI, File, UploadFile, HTTPException
+from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from PIL import Image
 
-from model import load_model, predict, get_preprocessing_transform, SKIN_CLASSES, RISK_LEVELS
 from augmentation import DermatologyAugmentor3D
+from model import (
+    SKIN_CLASSES,
+    NonFiniteInferenceError,
+    get_preprocessing_transform,
+    load_model,
+    predict,
+)
 
-# ── Global state ──────────────────────────────────────────────────────────────
-model = None
-transform = None
-augmentor = None
-device = "cpu"
+MAX_UPLOAD_BYTES = 10 * 1024 * 1024
+# Allow multipart headers in addition to the file itself.
+MAX_REQUEST_BYTES = MAX_UPLOAD_BYTES + 64 * 1024
+MAX_IMAGE_PIXELS = 25_000_000
+ALLOWED_ORIGINS = ("http://localhost:5173", "http://127.0.0.1:5173")
+NO_MODEL_MESSAGE = "No trained model is loaded. Classification is unavailable."
+DISCLAIMER = "Educational model output only; not clinically validated or a medical risk estimate."
+
+
+class UploadLimitMiddleware:
+    """Reject disallowed browser origins and oversized upload bodies before processing."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http" or scope["path"] not in ("/api/analyze", "/api/augment"):
+            await self.app(scope, receive, send)
+            return
+
+        origins = [value.decode("latin-1") for key, value in scope["headers"] if key.lower() == b"origin"]
+        if origins and (len(origins) != 1 or origins[0] not in ALLOWED_ORIGINS):
+            response = JSONResponse({"detail": "Upload origin is not allowed"}, status_code=403)
+            await response(scope, receive, send)
+            return
+
+        headers = dict(scope["headers"])
+        length = headers.get(b"content-length")
+        if length is not None:
+            try:
+                size = int(length)
+            except ValueError:
+                size = -1
+            if size < 0 or size > MAX_REQUEST_BYTES:
+                response = JSONResponse({"detail": "Upload exceeds the 10 MiB limit"}, status_code=413)
+                await response(scope, receive, send)
+                return
+
+        received = 0
+
+        async def limited_receive():
+            nonlocal received
+            message = await receive()
+            received += len(message.get("body", b""))
+            if received > MAX_REQUEST_BYTES:
+                raise HTTPException(status_code=413, detail="Upload exceeds the 10 MiB limit")
+            return message
+
+        await self.app(scope, limited_receive, send)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Load model on startup."""
-    global model, transform, augmentor
-    print("Loading DermClassifier model...")
-    model = load_model(weights_path=None, device=device)
-    transform = get_preprocessing_transform()
-    augmentor = DermatologyAugmentor3D(severity="medium")
-    print(f"Model loaded on {device} — ready for inference.")
+    """Enable inference only when an explicit checkpoint loads successfully."""
+    weights_path = os.environ.get("DERMSCREEN_WEIGHTS")
+    app.state.model = None
+    app.state.transform = None
+    app.state.augmentor = DermatologyAugmentor3D(severity="medium")
+    if weights_path:
+        app.state.model = load_model(weights_path, device="cpu")
+        app.state.transform = get_preprocessing_transform()
     yield
-    print("Shutting down.")
+    app.state.model = None
+    app.state.transform = None
 
 
 app = FastAPI(
     title="DermScreen AI",
-    description="Real-time dermatological screening with 3D augmentation",
+    description="Educational computer vision with 3D-aware augmentation",
     version="1.0.0",
     lifespan=lifespan,
 )
 
+app.add_middleware(UploadLimitMiddleware)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=ALLOWED_ORIGINS,
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type"],
 )
 
 
@@ -66,89 +112,70 @@ def pil_to_base64(img: Image.Image, fmt="PNG") -> str:
     return f"data:image/{fmt.lower()};base64,{b64}"
 
 
-def read_upload_image(file_bytes: bytes) -> Image.Image:
-    """Read uploaded bytes into RGB PIL Image."""
+async def read_upload_image(file: UploadFile) -> Image.Image:
+    """Limit file size and validate decoded image content, not the filename."""
+    if file.size is not None and file.size > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="Upload exceeds the 10 MiB limit")
+    file_bytes = await file.read(MAX_UPLOAD_BYTES + 1)
+    if len(file_bytes) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="Upload exceeds the 10 MiB limit")
     try:
-        img = Image.open(io.BytesIO(file_bytes)).convert("RGB")
-        return img
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid image file")
-
-
-# ── Endpoints ─────────────────────────────────────────────────────────────────
+        with Image.open(io.BytesIO(file_bytes)) as img:
+            if img.width * img.height > MAX_IMAGE_PIXELS:
+                raise HTTPException(status_code=400, detail="Image exceeds the 25 megapixel limit")
+            img.verify()
+        with Image.open(io.BytesIO(file_bytes)) as img:
+            return img.convert("RGB")
+    except (OSError, ValueError, SyntaxError, Image.DecompressionBombError) as exc:
+        raise HTTPException(status_code=400, detail="Invalid image file") from exc
 
 
 @app.get("/api/health")
 async def health():
-    return {"status": "ok", "model_loaded": model is not None}
+    trained = app.state.model is not None
+    return {"status": "ok", "model_loaded": trained, "model_trained": trained}
 
 
 @app.get("/api/model-info")
 async def model_info():
     return {
         "model_name": "DermClassifier v1.0",
-        "backbone": "MobileNetV2 (ImageNet pretrained)",
+        "model_trained": app.state.model is not None,
+        "backbone": "MobileNetV2",
         "classes": SKIN_CLASSES,
-        "risk_levels": RISK_LEVELS,
         "input_size": "224x224",
         "augmentation": "3D perspective, lighting, elastic, color",
-        "note": "Demo model — not for clinical use. Always consult a dermatologist.",
+        "note": DISCLAIMER,
     }
 
 
 @app.post("/api/analyze")
-async def analyze(file: UploadFile = File(...)):
-    """
-    Analyze a skin lesion image.
-    Returns classification results with probabilities and risk assessment.
-    """
-    start = time.time()
-    file_bytes = await file.read()
-    image = read_upload_image(file_bytes)
+async def analyze(file: Annotated[UploadFile, File()]):
+    """Return experimental classification only with a loaded checkpoint."""
+    image = await read_upload_image(file)
+    if app.state.model is None:
+        return {"model_trained": False, "message": NO_MODEL_MESSAGE}
 
-    # Run inference
-    result = predict(model, image, transform=transform, device=device)
-    elapsed = time.time() - start
-
+    start = time.perf_counter()
+    try:
+        result = predict(app.state.model, image, transform=app.state.transform, device="cpu")
+    except NonFiniteInferenceError as exc:
+        raise HTTPException(status_code=500, detail="Model produced non-finite class scores") from exc
     return {
         "id": str(uuid.uuid4()),
-        "prediction": result["prediction"],
-        "confidence": round(result["confidence"], 4),
-        "top_probability": round(result["top_probability"], 4),
-        "risk_level": result["risk_level"],
-        "description": result["description"],
-        "all_predictions": [
-            {
-                "class": p["class"],
-                "probability": round(p["probability"], 4),
-                "risk_level": p["risk_level"],
-                "description": p["description"],
-            }
-            for p in result["all_predictions"]
-        ],
-        "inference_time_ms": round(elapsed * 1000, 1),
-        "disclaimer": "This is a screening tool only. Not a medical diagnosis. Please consult a healthcare professional.",
+        "model_trained": True,
+        **result,
+        "inference_time_ms": round((time.perf_counter() - start) * 1000, 1),
+        "disclaimer": DISCLAIMER,
     }
 
 
 @app.post("/api/augment")
-async def augment(file: UploadFile = File(...)):
-    """
-    Apply 3D augmentation pipeline and return each step as base64 images.
-    Useful for visualizing the augmentation process.
-    """
-    file_bytes = await file.read()
-    image = read_upload_image(file_bytes)
-
-    # Resize for faster processing
-    image = image.resize((256, 256))
-
-    augmented, steps = augmentor.augment(image, return_steps=True)
-
-    step_images = {}
-    for name, img in steps.items():
-        step_images[name] = pil_to_base64(img)
-
+async def augment(file: Annotated[UploadFile, File()]):
+    """Apply the augmentation pipeline independently of classification."""
+    image = (await read_upload_image(file)).resize((256, 256))
+    augmented, steps = app.state.augmentor.augment(image, return_steps=True)
+    step_images = {name: pil_to_base64(img) for name, img in steps.items()}
     step_images["augmented"] = pil_to_base64(augmented)
 
     return {
@@ -168,4 +195,5 @@ async def augment(file: UploadFile = File(...)):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+
+    uvicorn.run("main:app", host="127.0.0.1", port=8000)

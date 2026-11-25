@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Scan,
@@ -8,7 +8,6 @@ import {
   Info,
   Wifi,
   WifiOff,
-  Github,
 } from 'lucide-react';
 
 import Camera from './components/Camera';
@@ -32,7 +31,11 @@ export default function App() {
   const [previewUrl, setPreviewUrl] = useState(null);
   const [lastBlob, setLastBlob] = useState(null);
   const [backendOnline, setBackendOnline] = useState(false);
-  const [error, setError] = useState(null);
+  const [analysisError, setAnalysisError] = useState(null);
+  const [augmentationError, setAugmentationError] = useState(null);
+  const analysisRequest = useRef(0);
+  const augmentationRequest = useRef(0);
+  const selectedBlob = useRef(null);
 
   // Check backend health on mount
   useEffect(() => {
@@ -45,36 +48,63 @@ export default function App() {
     return () => clearInterval(interval);
   }, []);
 
-  const handleCapture = useCallback(async (blob) => {
-    setError(null);
+  useEffect(() => () => {
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+  }, [previewUrl]);
+
+  useEffect(() => () => {
+    analysisRequest.current++;
+    augmentationRequest.current++;
+  }, []);
+
+  const clearImage = useCallback(() => {
+    analysisRequest.current++;
+    augmentationRequest.current++;
+    selectedBlob.current = null;
+    setAnalysisError(null);
+    setAugmentationError(null);
     setResult(null);
     setAugData(null);
+    setLastBlob(null);
+    setPreviewUrl(null);
+    setIsAnalyzing(false);
+  }, []);
+
+  const handleCapture = useCallback(async (blob) => {
+    clearImage();
+    selectedBlob.current = blob;
     setLastBlob(blob);
 
     const url = URL.createObjectURL(blob);
     setPreviewUrl(url);
 
     // Auto-analyze
+    const request = ++analysisRequest.current;
     setIsAnalyzing(true);
     try {
       const res = await analyzeImage(blob);
-      setResult(res);
+      if (request === analysisRequest.current) setResult(res);
     } catch (err) {
-      setError(err.message || 'Analysis failed. Is the backend running?');
+      if (request === analysisRequest.current) {
+        setAnalysisError(err.message || 'Analysis failed. Is the backend running?');
+      }
     } finally {
-      setIsAnalyzing(false);
+      if (request === analysisRequest.current) setIsAnalyzing(false);
     }
-  }, []);
+  }, [clearImage]);
 
   const handleAugment = useCallback(async () => {
-    if (!lastBlob) return;
-    setError(null);
+    if (!lastBlob || lastBlob !== selectedBlob.current) return;
+    const request = ++augmentationRequest.current;
+    setAugmentationError(null);
+    setActiveTab('augment');
     try {
       const data = await augmentImage(lastBlob);
-      setAugData(data);
-      setActiveTab('augment');
+      if (request === augmentationRequest.current) setAugData(data);
     } catch (err) {
-      setError('Augmentation failed. Is the backend running?');
+      if (request === augmentationRequest.current) {
+        setAugmentationError(err.message || 'Augmentation failed. Is the backend running?');
+      }
     }
   }, [lastBlob]);
 
@@ -91,7 +121,7 @@ export default function App() {
               <h1 className="text-lg font-bold bg-gradient-to-r from-white to-medical-300 bg-clip-text text-transparent">
                 DermScreen AI
               </h1>
-              <p className="text-[10px] text-white/30 -mt-0.5">Real-time Dermatological Screening</p>
+              <p className="text-[10px] text-white/30 -mt-0.5">Educational Computer Vision</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -148,7 +178,7 @@ export default function App() {
               className="flex flex-col lg:flex-row gap-6 items-start"
             >
               <div className="w-full lg:w-1/2 flex flex-col items-center gap-4">
-                <Camera onCapture={handleCapture} isAnalyzing={isAnalyzing} />
+                <Camera onCapture={handleCapture} onClear={clearImage} preview={previewUrl} isAnalyzing={isAnalyzing} />
 
                 {/* Action buttons */}
                 {lastBlob && result && (
@@ -172,16 +202,16 @@ export default function App() {
               </div>
 
               <div className="w-full lg:w-1/2 flex flex-col items-center">
-                {error && (
-                  <div className="w-full max-w-md p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-300 text-sm mb-4">
-                    {error}
+                {analysisError && (
+                  <div role="alert" className="w-full max-w-md p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-300 text-sm mb-4">
+                    {analysisError}
                   </div>
                 )}
                 <Results result={result} />
                 {!result && !isAnalyzing && (
                   <div className="text-center text-white/30 mt-8">
                     <Scan size={48} className="mx-auto mb-3 opacity-30" />
-                    <p className="text-sm">Capture or upload an image to begin screening</p>
+                    <p className="text-sm">Capture or upload an image to explore</p>
                   </div>
                 )}
               </div>
@@ -200,7 +230,7 @@ export default function App() {
               <div className="text-center mb-2">
                 <h2 className="text-xl font-bold text-white">3D Skin Surface Viewer</h2>
                 <p className="text-sm text-white/40 mt-1">
-                  Interactive 3D projection of captured skin lesion. Drag to rotate, scroll to zoom.
+                  Image projected onto a simulated curved surface, not a reconstruction. Drag to rotate, scroll to zoom.
                 </p>
               </div>
               <div className="w-full max-w-lg">
@@ -221,12 +251,17 @@ export default function App() {
               exit={{ opacity: 0 }}
               className="flex flex-col items-center gap-4"
             >
+              {augmentationError && (
+                <div role="alert" className="w-full max-w-md p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-300 text-sm">
+                  {augmentationError}
+                </div>
+              )}
               {augData ? (
                 <AugmentationViewer augData={augData} onRerun={handleAugment} />
               ) : (
                 <div className="text-center text-white/30 mt-12">
                   <Brain size={48} className="mx-auto mb-3 opacity-30" />
-                  <p className="text-sm">Capture and analyze an image first, then view the 3D augmentation pipeline</p>
+                  <p className="text-sm">Capture or upload an image first, then view the 3D augmentation pipeline</p>
                   {lastBlob && (
                     <button
                       onClick={handleAugment}
@@ -252,20 +287,19 @@ export default function App() {
               <div className="glass-card p-6">
                 <h2 className="text-xl font-bold text-white mb-4">About DermScreen AI</h2>
                 <p className="text-white/60 text-sm leading-relaxed mb-4">
-                  DermScreen AI is a real-time deep learning system for dermatological screening. It uses 
-                  your phone's camera to capture skin lesion images, processes them through a MobileNetV2-based 
-                  neural network with channel attention, and provides classification across 7 common skin 
-                  conditions with risk assessment.
+                  DermScreen AI is an educational computer-vision project. Explore how perspective,
+                  lighting and color transforms change an image, or train a MobileNetV2 classifier
+                  for seven dataset categories. No trained weights are included.
                 </p>
                 <h3 className="text-lg font-semibold text-white mb-2">Key Features</h3>
                 <ul className="space-y-2 text-sm text-white/60">
                   <li className="flex items-start gap-2">
                     <span className="text-medical-400 mt-0.5">•</span>
-                    <span><strong className="text-white/80">Real-time Camera Input:</strong> WebRTC-powered camera access with front/rear switching</span>
+                    <span><strong className="text-white/80">Camera Input:</strong> Camera capture and image upload</span>
                   </li>
                   <li className="flex items-start gap-2">
                     <span className="text-medical-400 mt-0.5">•</span>
-                    <span><strong className="text-white/80">DL Classification:</strong> MobileNetV2 backbone with channel attention for 7 skin lesion types</span>
+                    <span><strong className="text-white/80">Trainable Classifier:</strong> MobileNetV2 with channel attention for seven dataset labels</span>
                   </li>
                   <li className="flex items-start gap-2">
                     <span className="text-medical-400 mt-0.5">•</span>
@@ -275,23 +309,18 @@ export default function App() {
                     <span className="text-medical-400 mt-0.5">•</span>
                     <span><strong className="text-white/80">3D Surface Viewer:</strong> Interactive Three.js visualization projecting lesion onto curved skin geometry</span>
                   </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-medical-400 mt-0.5">•</span>
-                    <span><strong className="text-white/80">Risk Assessment:</strong> Color-coded risk levels (Critical, High, Moderate, Low) with clinical descriptions</span>
-                  </li>
                 </ul>
               </div>
 
               <div className="glass-card p-6">
                 <h3 className="text-lg font-semibold text-white mb-2">Model Architecture</h3>
                 <div className="bg-black/30 rounded-xl p-4 font-mono text-xs text-medical-300 space-y-1">
-                  <p>MobileNetV2 (ImageNet Pretrained)</p>
+                  <p>MobileNetV2 (optional ImageNet initialization)</p>
                   <p>  → Channel Attention (SE-style)</p>
                   <p>  → Global Average Pooling</p>
                   <p>  → FC(1280→512) + BN + ReLU + Dropout(0.3)</p>
                   <p>  → FC(512→256) + BN + ReLU + Dropout(0.2)</p>
                   <p>  → FC(256→7) → Softmax</p>
-                  <p className="text-white/30 mt-2">Auxiliary: FC(1280→128→1→Sigmoid) confidence</p>
                 </div>
               </div>
 
@@ -299,16 +328,11 @@ export default function App() {
                 <h3 className="text-lg font-semibold text-white mb-2">Classification Categories</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {[
-                    { name: 'Melanoma', risk: 'critical' },
-                    { name: 'Basal Cell Carcinoma', risk: 'high' },
-                    { name: 'Actinic Keratosis', risk: 'moderate' },
-                    { name: 'Vascular Lesion', risk: 'moderate' },
-                    { name: 'Benign Keratosis', risk: 'low' },
-                    { name: 'Melanocytic Nevi', risk: 'low' },
-                    { name: 'Dermatofibroma', risk: 'low' },
-                  ].map(c => (
-                    <div key={c.name} className={`px-3 py-2 rounded-lg border text-sm risk-${c.risk}`}>
-                      {c.name}
+                    'Melanoma', 'Basal Cell Carcinoma', 'Actinic Keratosis', 'Vascular Lesion',
+                    'Benign Keratosis', 'Melanocytic Nevi', 'Dermatofibroma',
+                  ].map(name => (
+                    <div key={name} className="px-3 py-2 rounded-lg border border-white/10 text-sm text-white/60">
+                      {name}
                     </div>
                   ))}
                 </div>
@@ -316,10 +340,9 @@ export default function App() {
 
               <div className="p-4 rounded-xl bg-amber-500/5 border border-amber-500/20">
                 <p className="text-xs text-amber-200/70 leading-relaxed">
-                  <strong className="text-amber-300">⚕️ Medical Disclaimer:</strong> This tool is for educational 
-                  and screening purposes only. It is NOT a substitute for professional medical diagnosis. 
-                  The demo model uses ImageNet pretrained weights and has not been clinically validated. 
-                  Always consult a board-certified dermatologist for any skin concerns.
+                  <strong className="text-amber-300">Educational use only:</strong> This is not a medical device
+                  and has not been clinically validated. Even with trained weights, class scores are not
+                  estimates of medical risk and must not be used for diagnosis or treatment decisions.
                 </p>
               </div>
             </motion.div>
@@ -329,7 +352,7 @@ export default function App() {
 
       {/* Footer */}
       <footer className="border-t border-white/5 py-4 text-center text-xs text-white/20">
-        DermScreen AI v1.0 — Deep Learning Dermatological Screening System
+        DermScreen AI v1.0 — Educational computer vision, not a medical device
       </footer>
     </div>
   );

@@ -4,10 +4,10 @@ Implements perspective warping, lighting simulation, and surface-aware transform
 to simulate different camera angles and conditions on skin lesions.
 """
 
-import numpy as np
 import cv2
-from scipy.ndimage import map_coordinates, gaussian_filter
+import numpy as np
 from PIL import Image
+from scipy.ndimage import gaussian_filter
 
 
 class SurfaceNormalEstimator:
