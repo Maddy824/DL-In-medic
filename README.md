@@ -1,351 +1,153 @@
-# 🩺 DermScreen AI — Real-Time Dermatological Screening System
+# DermScreen
 
-[![Python](https://img.shields.io/badge/Python-3.9+-blue.svg)](https://www.python.org/downloads/)
-[![React](https://img.shields.io/badge/React-18.2-61dafb.svg)](https://reactjs.org/)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.104-009688.svg)](https://fastapi.tiangolo.com/)
-[![PyTorch](https://img.shields.io/badge/PyTorch-2.1-ee4c2c.svg)](https://pytorch.org/)
-[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+DermScreen is an educational computer-vision project built around a 3D-aware image augmentation pipeline, a browser camera and upload interface, and a trainable MobileNetV2 classifier.
 
-**DermScreen AI** is a cutting-edge deep learning system for real-time dermatological screening using phone camera input. It combines advanced computer vision, 3D augmentation techniques, and medical imaging classification to provide instant skin lesion analysis with risk assessment.
+**This is not a medical device. It has not been clinically validated, and no trained classifier weights ship with it.** By default, classification is disabled. You can still capture or upload images, explore the augmentation steps, and project an image onto a simulated 3D surface. Do not use this project to assess medical risk, diagnose conditions, or make treatment decisions.
 
-![DermScreen AI Demo](https://img.shields.io/badge/Status-Production%20Ready-success)
+## What you can explore
 
----
+- **Augmentation pipeline:** gradient-based pseudo-surface normals, perspective warping with a 3D rotation and projection, Lambertian lighting, elastic deformation, and HSV color shifts. Each intermediate image is displayed separately.
+- **Camera interface:** capture images in the browser or choose an existing image file.
+- **3D viewer:** rotate and zoom a curved mesh textured with your image. The geometry and estimated normals are illustrative, not a reconstruction of skin anatomy.
+- **Classifier:** experiment with a seven-class MobileNetV2 model with channel attention, trained on your own labeled dataset.
 
-##  Key Features
+![System architecture](docs/architecture.svg)
 
-###  **Real-Time Classification**
-- **MobileNetV2-based CNN** with channel attention mechanism
-- **7 skin lesion categories**: Melanoma, Basal Cell Carcinoma, Actinic Keratosis, Vascular Lesion, Benign Keratosis, Melanocytic Nevi, Dermatofibroma
-- **Risk-level assessment**: Critical, High, Moderate, Low
-- **Sub-second inference** on CPU (~100-300ms)
+## Local setup
 
-###  **Camera Integration**
-- WebRTC-powered real-time camera access
-- Front/rear camera switching
-- Live capture with viewfinder overlay
-- File upload support for existing images
+Requirements: Python 3.10–3.13 (tested locally with Python 3.11.16) and Node.js 22.13+ within the 22 series, or Node.js 24+ with npm. CI is configured to test the backend on all four Python versions.
 
-###  **3D Augmentation Pipeline**
-Advanced data augmentation simulating real-world variations:
-- **Surface Normal Estimation** — Gradient-based pseudo-3D reconstruction
-- **Perspective Warping** — 3D rotation (pitch/yaw/roll) via homography transforms
-- **Lambertian Lighting** — Surface-aware lighting simulation
-- **Elastic Deformation** — Skin stretch/compression modeling
-- **Color Augmentation** — HSV-space white balance & skin tone variation
+Run the following from the repository root (substitute your supported Python interpreter if needed):
 
-###  **3D Visualization**
-- Interactive Three.js 3D skin surface viewer
-- Lesion texture mapping onto curved geometry
-- Real-time rotation and zoom controls
-- Step-by-step augmentation visualization
-
-###  **Modern Medical UI**
-- Dark mode medical-grade interface
-- Animated risk cards with color-coded severity
-- Probability distribution charts
-- Responsive design for mobile/desktop
-
----
-
-##  Architecture
-
-![System Architecture](docs/architecture.svg)
-
----
-
-##  Quick Start
-
-### Prerequisites
-- **Python 3.9+**
-- **Node.js 18+**
-- **npm or yarn**
-
-### Installation
-
-#### 1. Clone the repository
 ```bash
-git clone https://github.com/Maddy824/DL-In-medic.git
-cd DL-In-medic
+python3.11 -m venv .venv
+source .venv/bin/activate
 ```
 
-#### 2. Backend Setup
+On Linux, if you only need CPU PyTorch, optionally install its CPU builds first:
+
 ```bash
-cd backend
-pip install -r requirements.txt
+python -m pip install torch==2.8.0 torchvision==0.23.0 --index-url https://download.pytorch.org/whl/cpu
 ```
 
-#### 3. Frontend Setup
+Then install the project dependencies:
+
 ```bash
-cd ../frontend
-npm install
+python -m pip install -r backend/requirements.txt
+npm ci --prefix frontend
 ```
 
-### Running the Application
+Start the backend and frontend in separate terminals, each from the repository root:
 
-#### Terminal 1 — Start Backend Server
 ```bash
-cd backend
-python3 -m uvicorn main:app --host 0.0.0.0 --port 8000
+# Terminal 1
+.venv/bin/python -m uvicorn main:app --app-dir backend --host 127.0.0.1 --port 8000
 ```
 
-#### Terminal 2 — Start Frontend Dev Server
 ```bash
-cd frontend
-npm run dev
+# Terminal 2
+npm --prefix frontend run dev
 ```
 
-#### Access the Application
-Open your browser and navigate to:
-```
-http://localhost:5173
-```
+Open http://127.0.0.1:5173. Capture or upload an image, then try **View 3D Augmentation** or **3D Surface**. With no weights configured, the Results panel explains that no trained model is loaded. No ImageNet download is needed to run the demo.
 
-The frontend will automatically proxy API requests to the backend at `http://localhost:8000`.
+The development proxy forwards `/api` to `127.0.0.1:8000`. The backend binds to loopback by default. CORS allows the Vite development origins on port 5173 (`localhost` and `127.0.0.1`); both image endpoints also reject requests with any other `Origin` header before reading the upload. Requests without an `Origin` header remain supported for local command-line use. This origin check is not authentication. Both image endpoints enforce a 10 MiB file limit, reject invalid image content, and limit decoded images to 25 megapixels. The multipart request limit also allows up to 64 KiB of overhead. Use non-sensitive images in this educational demo.
 
----
+## Train your own classifier
 
-##  Model Performance
+The training script expects a labeled dataset in torchvision ImageFolder format. To use HAM10000, obtain the images and metadata yourself from [Harvard Dataverse](https://doi.org/10.7910/DVN/DBW86T), subject to the dataset's own license and terms. The images and metadata are not included here.
 
-### Architecture Details
-| Component | Specification |
-|-----------|--------------|
-| **Backbone** | MobileNetV2 (ImageNet pretrained) |
-| **Input Size** | 224×224 RGB |
-| **Parameters** | ~3.5M trainable |
-| **Attention** | Channel attention (reduction=16) |
-| **Regularization** | Dropout (0.3, 0.3, 0.2), BatchNorm |
-| **Output** | 7 classes + confidence score |
+Prepare separate training and validation splits **before** copying images into class directories. For HAM10000, group by `lesion_id` so multiple images of the same lesion never appear in both splits. Keep all seven classes represented in both splits. Map the metadata `dx` codes to the exact model folder names below (the existing model names are shorthand; for example, `akiec` also includes intraepithelial carcinoma):
 
-### Classification Categories
-| Class | Risk Level | Description |
-|-------|-----------|-------------|
-| **Melanoma** | 🔴 Critical | Most dangerous skin cancer — requires immediate evaluation |
-| **Basal Cell Carcinoma** | 🟠 High | Most common skin cancer — seek dermatologist |
-| **Actinic Keratosis** | 🟡 Moderate | Pre-cancerous lesion — monitor and treat |
-| **Vascular Lesion** | 🟡 Moderate | Blood vessel-related — usually benign |
-| **Benign Keratosis** | 🟢 Low | Non-cancerous growth — generally harmless |
-| **Melanocytic Nevi** | 🟢 Low | Common mole — monitor for changes |
-| **Dermatofibroma** | 🟢 Low | Benign fibrous nodule — no treatment needed |
+| HAM10000 code | Directory name |
+| --- | --- |
+| `akiec` | `Actinic Keratosis` |
+| `bcc` | `Basal Cell Carcinoma` |
+| `bkl` | `Benign Keratosis` |
+| `df` | `Dermatofibroma` |
+| `mel` | `Melanoma` |
+| `nv` | `Melanocytic Nevi` |
+| `vasc` | `Vascular Lesion` |
 
----
+For example, place your prepared dataset under `data/processed/ham10000/` (ignored by Git):
 
-##  Technical Deep Dive
-
-### 3D Augmentation Pipeline
-
-#### 1. **Surface Normal Estimation**
-```python
-# Gradient-based normal map generation
-dx = cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=5)
-dy = cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=5)
-normals = normalize([-dx, -dy, 1])
+```text
+data/processed/ham10000/
+  train/
+    Actinic Keratosis/
+      image1.jpg
+    Basal Cell Carcinoma/
+    Benign Keratosis/
+    Dermatofibroma/
+    Melanoma/
+    Melanocytic Nevi/
+    Vascular Lesion/
+  val/
+    (same seven class directories, with different images)
 ```
 
-#### 2. **Perspective Warping**
-```python
-# 3D rotation matrices (Rx, Ry, Rz)
-R = Rz @ Ry @ Rx
-# Perspective projection with focal length f
-projected = f * R @ point / (f + z)
-```
+Each directory must contain at least one image. The loader maps directory names to the classifier's fixed output order.
 
-#### 3. **Lambertian Lighting**
-```python
-# Surface shading based on light direction
-intensity = max(0, dot(normal, light_direction))
-shaded = ambient + diffuse * intensity
-```
+Run training from the repository root:
 
-#### 4. **Elastic Deformation**
-```python
-# Gaussian-smoothed random displacement field
-dx = gaussian_filter(random_field, sigma=10)
-warped = remap(image, x + dx, y + dy)
-```
-
-### API Endpoints
-
-#### `POST /api/analyze`
-Analyze a skin lesion image and return classification results.
-
-**Request:**
 ```bash
-curl -X POST http://localhost:8000/api/analyze \
-  -F "file=@lesion.jpg"
+.venv/bin/python backend/train.py --data-dir data/processed/ham10000 \
+  --output weights/dermclassifier.pt --epochs 5 --batch-size 16
 ```
 
-**Response:**
+By default the training script fine-tunes an ImageNet-initialized backbone, which downloads weights if they are not already cached. Use `--no-pretrained` to start from scratch with no download. The script uses cross-entropy, AdamW and 224×224 RGB inputs. It reports validation accuracy (fraction of correctly classified images), balanced accuracy (mean class recall), and recall for each of the seven classes after every epoch. The final state dictionary is saved to the output path.
+
+Restart the backend with your checkpoint explicitly selected:
+
+```bash
+DERMSCREEN_WEIGHTS="$PWD/weights/dermclassifier.pt" \
+  .venv/bin/python -m uvicorn main:app --app-dir backend --host 127.0.0.1 --port 8000
+```
+
+An invalid, non-finite, or missing configured checkpoint fails startup rather than falling back to random predictions. Non-finite inference scores are rejected. `model_trained: true` means a matching checkpoint was loaded; it does not certify how well it was trained. Experimental class scores are uncalibrated softmax outputs; no clinical risk score or auxiliary confidence is reported. No HAM10000 training results or clinical performance claims are provided by this repository.
+
+## API
+
+| Endpoint | Behavior |
+| --- | --- |
+| `GET /api/health` | Service status and `model_trained` flag |
+| `GET /api/model-info` | Architecture, categories and `model_trained` flag |
+| `POST /api/analyze` | Validates the uploaded image; returns model status or experimental class scores |
+| `POST /api/augment` | Returns seven PNG data URIs and their display order and labels, with or without a model |
+
+Both POST endpoints accept a multipart `file` field. For example, substitute a path to your own image:
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/analyze -F 'file=@/path/to/image.png'
+```
+
+Default response without weights:
+
 ```json
 {
-  "id": "uuid-here",
-  "prediction": "Melanocytic Nevi",
-  "confidence": 0.8234,
-  "top_probability": 0.7891,
-  "risk_level": "low",
-  "description": "Common mole. Usually benign but monitor for changes.",
-  "all_predictions": [...],
-  "inference_time_ms": 142.3,
-  "disclaimer": "This is a screening tool only..."
+  "model_trained": false,
+  "message": "No trained model is loaded. Classification is unavailable."
 }
 ```
 
-#### `POST /api/augment`
-Apply 3D augmentation pipeline and return visualization steps.
+## Tests and development
 
-**Response:**
-```json
-{
-  "steps": {
-    "original": "data:image/png;base64,...",
-    "normals": "data:image/png;base64,...",
-    "perspective": "data:image/png;base64,...",
-    "lighting": "data:image/png;base64,...",
-    "elastic": "data:image/png;base64,...",
-    "color": "data:image/png;base64,...",
-    "augmented": "data:image/png;base64,..."
-  },
-  "step_order": ["original", "normals", ...]
-}
-```
+From the repository root, after setup:
 
----
-
-## 📁 Project Structure
-
-```
-DL-In-medic/
-├── backend/
-│   ├── main.py              # FastAPI server & endpoints
-│   ├── model.py             # DermClassifier architecture
-│   ├── augmentation.py      # 3D augmentation pipeline
-│   └── requirements.txt     # Python dependencies
-├── frontend/
-│   ├── src/
-│   │   ├── App.jsx          # Main application component
-│   │   ├── components/
-│   │   │   ├── Camera.jsx           # Camera capture UI
-│   │   │   ├── Results.jsx          # Classification results
-│   │   │   ├── ThreeDViewer.jsx     # 3D surface viewer
-│   │   │   └── AugmentationViewer.jsx
-│   │   ├── utils/
-│   │   │   └── api.js       # API client functions
-│   │   ├── index.css        # Tailwind styles
-│   │   └── main.jsx         # React entry point
-│   ├── package.json
-│   ├── vite.config.js
-│   ├── tailwind.config.js
-│   └── index.html
-├── .gitignore
-└── README.md
-```
-
----
-
-##  Use Cases
-
-- ** Telemedicine**: Remote skin screening for underserved areas
-- ** Research**: Dermatological dataset augmentation
-- ** Education**: Medical student training tool
-- ** Early Detection**: Preliminary melanoma screening
-- ** Clinical Trials**: Automated lesion documentation
-
----
-
-##  Medical Disclaimer
-
-**IMPORTANT**: This tool is for **educational and screening purposes only**. It is **NOT a substitute for professional medical diagnosis**.
-
-- The demo model uses ImageNet pretrained weights
-- **Not clinically validated** or FDA-approved
-- Always consult a **board-certified dermatologist** for any skin concerns
-- Do not use for self-diagnosis or treatment decisions
-- Accuracy may vary based on image quality, lighting, and skin type
-
----
-
-##  Development
-
-### Training Your Own Model
-
-To train on the HAM10000 dataset or custom data:
-
-```python
-# Example training script (not included)
-from model import DermClassifier
-import torch
-
-model = DermClassifier(num_classes=7, pretrained=True)
-optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
-# ... training loop
-```
-
-### Running Tests
 ```bash
-# Backend tests
-cd backend
-pytest
-
-# Frontend tests
-cd frontend
-npm test
+.venv/bin/python -m pip install -r backend/requirements-dev.txt
+.venv/bin/python -m pytest -q backend/tests
+.venv/bin/ruff check backend
+npm --prefix frontend run lint
+npm --prefix frontend test
+npm --prefix frontend run build
 ```
 
-### Building for Production
-```bash
-# Frontend production build
-cd frontend
-npm run build
+Backend tests exercise the API without downloading weights, including origin checks, upload limits, invalid model scores, and one training step on a tiny synthetic ImageFolder dataset before loading the saved checkpoint. The frontend tests cover the Results panel in both trained and untrained modes, image selection and overlapping requests, augmentation errors, and camera stream cleanup using simulated media streams. The build produces static frontend assets in `frontend/dist/`; use the development setup above to run both services together.
 
-# Serve with backend
-cd ../backend
-uvicorn main:app --host 0.0.0.0 --port 8000
-```
+## License and references
 
----
+Project code is licensed under [MIT](LICENSE). Dataset and pretrained weight licenses are separate.
 
-##  Contributing
-
-Contributions are welcome! Please follow these guidelines:
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
----
-
-##  License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
----
-
-##  Acknowledgments
-
-- **HAM10000 Dataset**: Tschandl, P., Rosendahl, C. & Kittler, H. The HAM10000 dataset, a large collection of multi-source dermatoscopic images of common pigmented skin lesions. Sci. Data 5, 180161 (2018).
-- **MobileNetV2**: Sandler, M., et al. "MobileNetV2: Inverted Residuals and Linear Bottlenecks." CVPR 2018.
-- **PyTorch**: Paszke, A., et al. "PyTorch: An Imperative Style, High-Performance Deep Learning Library." NeurIPS 2019.
-
----
-
-##  Contact
-
-**Maddy** — [@Maddy824](https://github.com/Maddy824)
-
-Project Link: [https://github.com/Maddy824/DL-In-medic](https://github.com/Maddy824/DL-In-medic)
-
----
-
-##  Demo
-
- **Live Demo**: Coming soon!
-
----
-
-<div align="center">
-  <strong>Built with love for advancing dermatological AI</strong>
-  <br>
-  <sub>Remember: Always consult a healthcare professional for medical advice</sub>
-</div>
+- Tschandl, P., Rosendahl, C. & Kittler, H. [The HAM10000 dataset](https://doi.org/10.1038/sdata.2018.161). Scientific Data 5, 180161 (2018).
+- Sandler, M. et al. [MobileNetV2: Inverted Residuals and Linear Bottlenecks](https://arxiv.org/abs/1801.04381). CVPR 2018.

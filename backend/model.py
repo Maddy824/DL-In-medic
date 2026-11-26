@@ -1,14 +1,15 @@
 """
-Deep Learning Model for Dermatological Screening
+Dermatology image classification model
 Uses MobileNetV2 backbone with custom classification head for skin lesion classification.
-Supports 7 HAM10000 categories + confidence scoring.
+Supports seven HAM10000 categories for educational use.
 """
+
+from collections.abc import Mapping
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torchvision import models, transforms
-
 
 SKIN_CLASSES = [
     "Actinic Keratosis",
@@ -19,27 +20,6 @@ SKIN_CLASSES = [
     "Melanocytic Nevi",
     "Vascular Lesion",
 ]
-
-RISK_LEVELS = {
-    "Actinic Keratosis": "moderate",
-    "Basal Cell Carcinoma": "high",
-    "Benign Keratosis": "low",
-    "Dermatofibroma": "low",
-    "Melanoma": "critical",
-    "Melanocytic Nevi": "low",
-    "Vascular Lesion": "moderate",
-}
-
-DESCRIPTIONS = {
-    "Actinic Keratosis": "Pre-cancerous scaly patch caused by UV exposure. Requires monitoring and possible treatment.",
-    "Basal Cell Carcinoma": "Most common skin cancer. Rarely metastasizes but can cause local tissue damage. Seek dermatologist.",
-    "Benign Keratosis": "Non-cancerous skin growth (seborrheic keratosis, solar lentigo). Generally harmless.",
-    "Dermatofibroma": "Common benign fibrous nodule. Usually no treatment needed unless symptomatic.",
-    "Melanoma": "Most dangerous form of skin cancer. URGENT — seek immediate professional evaluation.",
-    "Melanocytic Nevi": "Common mole. Usually benign but monitor for changes (ABCDE criteria).",
-    "Vascular Lesion": "Blood vessel-related lesion (angioma, pyogenic granuloma). Usually benign.",
-}
-
 
 class AttentionBlock(nn.Module):
     """Channel attention module for focusing on discriminative features."""
@@ -66,9 +46,8 @@ class AttentionBlock(nn.Module):
 class DermClassifier(nn.Module):
     """
     Dermatological image classifier with:
-    - MobileNetV2 backbone (pretrained on ImageNet)
+    - MobileNetV2 backbone (optionally pretrained on ImageNet)
     - Channel attention mechanism
-    - Multi-scale feature aggregation
     - Dropout regularization
     """
 
@@ -99,7 +78,7 @@ class DermClassifier(nn.Module):
             nn.Linear(256, num_classes),
         )
 
-        # Auxiliary confidence head
+        # Legacy auxiliary head (not used for reported scores)
         self.confidence_head = nn.Sequential(
             nn.Linear(self.feature_dim, 128),
             nn.ReLU(inplace=True),
@@ -137,51 +116,53 @@ def get_preprocessing_transform():
     ])
 
 
-def load_model(weights_path=None, device="cpu"):
-    """Load model with optional trained weights."""
-    model = DermClassifier(num_classes=len(SKIN_CLASSES), pretrained=True)
-    if weights_path:
-        state_dict = torch.load(weights_path, map_location=device)
-        model.load_state_dict(state_dict)
+def load_model(weights_path, device="cpu"):
+    """Load an explicit DermClassifier state dict without downloading weights."""
+    if not weights_path:
+        raise ValueError("A trained weights path is required")
+    model = DermClassifier(num_classes=len(SKIN_CLASSES), pretrained=False)
+    state_dict = torch.load(weights_path, map_location=device, weights_only=True)
+    if not isinstance(state_dict, Mapping):
+        raise TypeError("Checkpoint must contain a model state dict")
+    validate_finite_tensors(state_dict)
+    model.load_state_dict(state_dict, strict=True)
+    # Copying into the model's dtype can overflow even when the source is finite.
+    validate_finite_tensors(model.state_dict())
     model.to(device)
     model.eval()
     return model
 
 
+def validate_finite_tensors(state_dict):
+    for name, tensor in state_dict.items():
+        if isinstance(tensor, torch.Tensor) and not torch.isfinite(tensor).all():
+            raise ValueError(f"Checkpoint contains non-finite values in {name}")
+
+
+class NonFiniteInferenceError(RuntimeError):
+    """The classifier cannot provide finite class scores."""
+
+
 @torch.no_grad()
 def predict(model, image, transform=None, device="cpu"):
-    """
-    Run inference on a PIL image.
-    Returns dict with class probabilities, predicted class, risk level, etc.
-    """
+    """Return softmax class scores, not calibrated probabilities of disease."""
     if transform is None:
         transform = get_preprocessing_transform()
 
     input_tensor = transform(image).unsqueeze(0).to(device)
-    logits, confidence = model(input_tensor)
-
-    probabilities = F.softmax(logits, dim=1).squeeze().cpu().numpy()
-    confidence_score = confidence.squeeze().cpu().item()
+    logits, _ = model(input_tensor)
+    if not torch.isfinite(logits).all():
+        raise NonFiniteInferenceError("Model produced non-finite logits")
+    scores = F.softmax(logits, dim=1)
+    if not torch.isfinite(scores).all():
+        raise NonFiniteInferenceError("Model produced non-finite probabilities")
+    probabilities = scores.squeeze(0).cpu().numpy()
     predicted_idx = probabilities.argmax()
-    predicted_class = SKIN_CLASSES[predicted_idx]
-
-    # Build top-k results
-    top_indices = probabilities.argsort()[::-1]
-    results = []
-    for idx in top_indices:
-        cls_name = SKIN_CLASSES[idx]
-        results.append({
-            "class": cls_name,
-            "probability": float(probabilities[idx]),
-            "risk_level": RISK_LEVELS[cls_name],
-            "description": DESCRIPTIONS[cls_name],
-        })
-
     return {
-        "prediction": predicted_class,
-        "confidence": float(confidence_score),
-        "top_probability": float(probabilities[predicted_idx]),
-        "risk_level": RISK_LEVELS[predicted_class],
-        "description": DESCRIPTIONS[predicted_class],
-        "all_predictions": results,
+        "prediction": SKIN_CLASSES[predicted_idx],
+        "top_probability": round(float(probabilities[predicted_idx]), 4),
+        "all_predictions": [
+            {"class": SKIN_CLASSES[idx], "probability": round(float(probabilities[idx]), 4)}
+            for idx in probabilities.argsort()[::-1]
+        ],
     }

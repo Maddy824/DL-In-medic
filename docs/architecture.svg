@@ -12,12 +12,12 @@
   <!-- Camera Component -->
   <rect x="50" y="62" width="172" height="56" rx="8" fill="#F1EFE8" stroke="#5F5E5A" stroke-width="0.5"/>
   <text x="136" y="85" text-anchor="middle" dominant-baseline="central" font-size="14" font-weight="500" fill="#2C2C2A">Camera component</text>
-  <text x="136" y="104" text-anchor="middle" dominant-baseline="central" font-size="12" fill="#5F5E5A">Captures dermoscopy images</text>
+  <text x="136" y="104" text-anchor="middle" dominant-baseline="central" font-size="12" fill="#5F5E5A">Captures or uploads images</text>
 
   <!-- 3D Viewer -->
   <rect x="254" y="62" width="172" height="56" rx="8" fill="#F1EFE8" stroke="#5F5E5A" stroke-width="0.5"/>
   <text x="340" y="85" text-anchor="middle" dominant-baseline="central" font-size="14" font-weight="500" fill="#2C2C2A">3D viewer (Three.js)</text>
-  <text x="340" y="104" text-anchor="middle" dominant-baseline="central" font-size="12" fill="#5F5E5A">Renders 3D lesion models</text>
+  <text x="340" y="104" text-anchor="middle" dominant-baseline="central" font-size="12" fill="#5F5E5A">Maps image to curved plane</text>
 
   <!-- Augmentation Viewer -->
   <rect x="458" y="62" width="172" height="56" rx="8" fill="#F1EFE8" stroke="#5F5E5A" stroke-width="0.5"/>
@@ -37,12 +37,12 @@
   <rect x="48" y="210" width="278" height="206" rx="10" fill="#E1F5EE" stroke="#0F6E56" stroke-width="0.5"/>
   <text x="187" y="233" text-anchor="middle" dominant-baseline="central" font-size="14" font-weight="500" fill="#085041">DermClassifier model</text>
   <line x1="60" y1="244" x2="314" y2="244" stroke="#0F6E56" stroke-width="0.5" opacity="0.3"/>
-  <text x="64" y="263" dominant-baseline="central" font-size="12" fill="#0F6E56">• MobileNetV2 backbone (ImageNet)</text>
+  <text x="64" y="263" dominant-baseline="central" font-size="12" fill="#0F6E56">• MobileNetV2 backbone</text>
   <text x="64" y="285" dominant-baseline="central" font-size="12" fill="#0F6E56">• Channel attention (SE-style)</text>
   <text x="64" y="307" dominant-baseline="central" font-size="12" fill="#0F6E56">• FC: 1280 → 512 → 256 → 7 classes</text>
-  <text x="64" y="329" dominant-baseline="central" font-size="12" fill="#0F6E56">• Confidence head: FC → 128 → 1</text>
-  <text x="64" y="351" dominant-baseline="central" font-size="12" fill="#0F6E56">• Softmax + sigmoid outputs</text>
-  <text x="64" y="373" dominant-baseline="central" font-size="12" fill="#0F6E56">• 7-class skin condition labels</text>
+  <text x="64" y="329" dominant-baseline="central" font-size="12" fill="#0F6E56">• Requires explicit checkpoint</text>
+  <text x="64" y="351" dominant-baseline="central" font-size="12" fill="#0F6E56">• Uncalibrated softmax scores</text>
+  <text x="64" y="373" dominant-baseline="central" font-size="12" fill="#0F6E56">• No scores without weights</text>
 
   <!-- 3D Augmentation Pipeline box -->
   <rect x="344" y="210" width="278" height="206" rx="10" fill="#FAECE7" stroke="#993C1D" stroke-width="0.5"/>
@@ -53,5 +53,5 @@
   <text x="360" y="307" dominant-baseline="central" font-size="12" fill="#993C1D">3. Lambertian lighting (dot-product)</text>
   <text x="360" y="329" dominant-baseline="central" font-size="12" fill="#993C1D">4. Elastic deformation (Gaussian)</text>
   <text x="360" y="351" dominant-baseline="central" font-size="12" fill="#993C1D">5. Color augmentation (HSV shifts)</text>
-  <text x="360" y="373" dominant-baseline="central" font-size="12" fill="#993C1D">6. Output → augmented tensor</text>
+  <text x="360" y="373" dominant-baseline="central" font-size="12" fill="#993C1D">6. Output → augmented image</text>
 </svg>
